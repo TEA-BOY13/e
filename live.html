@@ -56,7 +56,7 @@ video {
   <button class="go" onclick="goLive()">Go Live</button>
   <button class="stop" onclick="endLive()">End Live</button>
 
-  <video id="preview" autoplay muted></video>
+  <video id="preview" autoplay muted playsinline></video>
 </div>
 
 <script type="module">
@@ -72,7 +72,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-/* 🔥 Firebase Config */
+/* Firebase Config */
 const firebaseConfig = {
   apiKey: "AIzaSyC7krl12Xewrb3nEYzWGCEeQE0s5FgG10U",
   authDomain: "gamelive-3db71.firebaseapp.com",
@@ -95,57 +95,49 @@ let streamDocId = null;
 let currentUser = null;
 let username = "Unknown";
 
-const iceConfig = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-};
+const iceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-/* 🔐 AUTH STATE */
+/* Auth State */
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    location.href = "index.html";
-    return;
-  }
-
+  if (!user) { location.href = "index.html"; return; }
   currentUser = user;
 
   const snap = await getDoc(doc(db, "users", user.uid));
-  if (snap.exists()) {
-    username = snap.data().username;
-  }
+  if (snap.exists()) username = snap.data().username;
 });
 
-/* 🔴 START LIVE */
-window.goLive = async () => {
+/* Detect Mobile */
+function isMobile() {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
 
+/* Go Live */
+window.goLive = async () => {
   if (!auth.currentUser) {
     Swal.fire("Auth Error", "Please login again", "error");
     return;
   }
 
   const gameName = gameInput.value.trim();
-  if (!gameName) {
-    Swal.fire("Missing Game Name", "Enter game name", "warning");
-    return;
-  }
-
-  if (streamDocId) {
-    Swal.fire("Already Live", "You are already streaming", "info");
-    return;
-  }
+  if (!gameName) { Swal.fire("Missing Game Name", "Enter game name", "warning"); return; }
+  if (streamDocId) { Swal.fire("Already Live", "You are already streaming", "info"); return; }
 
   try {
-    /* Capture screen */
-    localStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    });
+    /* Use camera on mobile, screen share on desktop */
+    let constraints;
+    if (isMobile()) {
+      constraints = { video: { facingMode: "user" }, audio: true };
+    } else {
+      constraints = { video: true, audio: true };
+    }
 
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = localStream;
     video.style.display = "block";
 
-    /* Create stream doc */
+    /* Create stream document */
     const streamRef = await addDoc(collection(db, "streams"), {
-      userId: auth.currentUser.uid,
+      userId: currentUser.uid,
       username,
       game: gameName,
       live: true,
@@ -157,27 +149,21 @@ window.goLive = async () => {
 
     /* WebRTC */
     pc = new RTCPeerConnection(iceConfig);
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    localStream.getTracks().forEach(track =>
-      pc.addTrack(track, localStream)
-    );
-
-    pc.onicecandidate = (e) => {
+    pc.onicecandidate = e => {
       if (e.candidate) {
-        addDoc(
-          collection(db, "streams", streamDocId, "ice"),
-          e.candidate.toJSON()
-        );
+        addDoc(collection(db, "streams", streamDocId, "ice"), e.candidate.toJSON());
       }
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    await setDoc(
-      doc(db, "streams", streamDocId, "signal", "offer"),
-      { type: offer.type, sdp: offer.sdp }
-    );
+    await setDoc(doc(db, "streams", streamDocId, "signal", "offer"), {
+      type: offer.type,
+      sdp: offer.sdp
+    });
 
     Swal.fire("LIVE!", "Streaming started successfully", "success");
 
@@ -187,27 +173,18 @@ window.goLive = async () => {
   }
 };
 
-/* ⛔ END LIVE */
+/* End Live */
 window.endLive = async () => {
-
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
     video.srcObject = null;
     video.style.display = "none";
   }
-
-  if (pc) {
-    pc.close();
-    pc = null;
-  }
+  if (pc) { pc.close(); pc = null; }
 
   if (streamDocId) {
-    await setDoc(
-      doc(db, "streams", streamDocId),
-      { live: false, endedAt: serverTimestamp() },
-      { merge: true }
-    );
+    await setDoc(doc(db, "streams", streamDocId), { live: false, endedAt: serverTimestamp() }, { merge: true });
     streamDocId = null;
   }
 
