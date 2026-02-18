@@ -3,57 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Go Live</title>
+<title>Go Live - REAL Streaming</title>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <style>
-  body {
-    margin: 0;
-    font-family: Arial;
-    background: #020617;
-    color: white;
-    text-align: center;
-  }
-  header {
-    background: #0f172a;
-    padding: 15px;
-  }
-  .box {
-    padding: 20px;
-  }
-  input, button {
-    width: 90%;
-    padding: 12px;
-    margin-top: 12px;
-    border-radius: 6px;
-    border: none;
-  }
-  button {
-    font-weight: bold;
-    cursor: pointer;
-  }
-  .go {
-    background: #22c55e;
-  }
-  .stop {
-    background: #ef4444;
-    color: white;
-  }
-  video {
-    width: 90%;
-    margin-top: 15px;
-    border-radius: 10px;
-    display: none;
-    background: black;
-  }
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #020617;
+  color: white;
+  text-align: center;
+}
+header {
+  background: #0f172a;
+  padding: 15px;
+}
+.box {
+  padding: 20px;
+}
+input, button {
+  width: 90%;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 6px;
+  border: none;
+}
+button {
+  font-weight: bold;
+  cursor: pointer;
+}
+.go { background: #22c55e; }
+.stop { background: #ef4444; color: white; }
+video {
+  width: 90%;
+  margin-top: 15px;
+  border-radius: 10px;
+  display: none;
+  background: black;
+}
 </style>
 </head>
 
 <body>
 
 <header>
-  <h2>🔴 Go Live</h2>
+  <h2>🔴 Go Live (Real Streaming)</h2>
 </header>
 
 <div class="box">
@@ -64,119 +59,160 @@
   <video id="preview" autoplay muted></video>
 </div>
 
-<!-- Firebase v10 -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import {
-    getFirestore,
-    doc,
-    getDoc,
-    collection,
-    addDoc,
-    updateDoc,
-    serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  setDoc,
+  doc,
+  getDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyC7krl12Xewrb3nEYzWGCEeQE0s5FgG10U",
-    authDomain: "gamelive-3db71.firebaseapp.com",
-    projectId: "gamelive-3db71",
-    storageBucket: "gamelive-3db71.firebasestorage.app",
-    messagingSenderId: "581788962069",
-    appId: "1:581788962069:web:619583602ee846e17a6d1c"
-  };
+/* 🔥 Firebase Config */
+const firebaseConfig = {
+  apiKey: "AIzaSyC7krl12Xewrb3nEYzWGCEeQE0s5FgG10U",
+  authDomain: "gamelive-3db71.firebaseapp.com",
+  projectId: "gamelive-3db71",
+  storageBucket: "gamelive-3db71.firebasestorage.app",
+  messagingSenderId: "581788962069",
+  appId: "1:581788962069:web:619583602ee846e17a6d1c"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  const video = document.getElementById("preview");
-  const gameInput = document.getElementById("game");
+const video = document.getElementById("preview");
+const gameInput = document.getElementById("game");
 
-  let stream = null;
-  let streamDocId = null;
-  let currentUser = null;
-  let username = null;
+let pc = null;
+let localStream = null;
+let streamDocId = null;
+let currentUser = null;
+let username = "Unknown";
 
-  // 🔐 PROTECT PAGE + LOAD USERNAME
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      window.location.href = "index.html";
-      return;
-    }
+const iceConfig = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
 
-    currentUser = user;
+/* 🔐 AUTH STATE */
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    location.href = "index.html";
+    return;
+  }
 
-    // 🔎 Get username from Firestore
-    const userDoc = await getDoc(doc(db, "users", user.uid));
-    if (userDoc.exists()) {
-      username = userDoc.data().username;
-    } else {
-      username = "unknown";
-    }
-  });
+  currentUser = user;
 
-  // 🔴 START LIVE
-  window.goLive = async function () {
-    const gameName = gameInput.value.trim();
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (snap.exists()) {
+    username = snap.data().username;
+  }
+});
 
-    if (!gameName) {
-      Swal.fire("Missing Game Name", "Please enter the game name", "warning");
-      return;
-    }
+/* 🔴 START LIVE */
+window.goLive = async () => {
 
-    if (!username) {
-      Swal.fire("Error", "User profile not loaded", "error");
-      return;
-    }
+  if (!auth.currentUser) {
+    Swal.fire("Auth Error", "Please login again", "error");
+    return;
+  }
 
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
-      });
+  const gameName = gameInput.value.trim();
+  if (!gameName) {
+    Swal.fire("Missing Game Name", "Enter game name", "warning");
+    return;
+  }
 
-      video.style.display = "block";
-      video.srcObject = stream;
+  if (streamDocId) {
+    Swal.fire("Already Live", "You are already streaming", "info");
+    return;
+  }
 
-      const docRef = await addDoc(collection(db, "streams"), {
-        userId: currentUser.uid,
-        username: username,
-        game: gameName,
-        live: true,
-        featured: false,
-        startedAt: serverTimestamp()
-      });
+  try {
+    /* Capture screen */
+    localStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true
+    });
 
-      streamDocId = docRef.id;
+    video.srcObject = localStream;
+    video.style.display = "block";
 
-      Swal.fire("You're Live!", `Streaming ${gameName} as ${username} 🎮`, "success");
+    /* Create stream doc */
+    const streamRef = await addDoc(collection(db, "streams"), {
+      userId: auth.currentUser.uid,
+      username,
+      game: gameName,
+      live: true,
+      featured: false,
+      startedAt: serverTimestamp()
+    });
 
-    } catch (err) {
-      Swal.fire("Error", "Screen sharing denied or failed", "error");
-    }
-  };
+    streamDocId = streamRef.id;
 
-  // ⛔ END LIVE
-  window.endLive = async function () {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      video.style.display = "none";
-      video.srcObject = null;
-      stream = null;
-    }
+    /* WebRTC */
+    pc = new RTCPeerConnection(iceConfig);
 
-    if (streamDocId) {
-      await updateDoc(doc(db, "streams", streamDocId), {
-        live: false,
-        endedAt: serverTimestamp()
-      });
-      streamDocId = null;
-    }
+    localStream.getTracks().forEach(track =>
+      pc.addTrack(track, localStream)
+    );
 
-    Swal.fire("Live Ended", "Your stream has been stopped", "info");
-  };
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        addDoc(
+          collection(db, "streams", streamDocId, "ice"),
+          e.candidate.toJSON()
+        );
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await setDoc(
+      doc(db, "streams", streamDocId, "signal", "offer"),
+      { type: offer.type, sdp: offer.sdp }
+    );
+
+    Swal.fire("LIVE!", "Streaming started successfully", "success");
+
+  } catch (err) {
+    console.error(err);
+    Swal.fire("Error", err.message, "error");
+  }
+};
+
+/* ⛔ END LIVE */
+window.endLive = async () => {
+
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+    video.srcObject = null;
+    video.style.display = "none";
+  }
+
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+
+  if (streamDocId) {
+    await setDoc(
+      doc(db, "streams", streamDocId),
+      { live: false, endedAt: serverTimestamp() },
+      { merge: true }
+    );
+    streamDocId = null;
+  }
+
+  Swal.fire("Live Ended", "Your stream has been stopped", "info");
+};
 </script>
 
 </body>
