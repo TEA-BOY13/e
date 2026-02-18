@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GameLive - Login</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #020617;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  .box {
+    background: #0f172a;
+    padding: 25px;
+    width: 300px;
+    border-radius: 10px;
+  }
+  h2 {
+    text-align: center;
+    color: #22c55e;
+  }
+  input, button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 5px;
+    border: none;
+  }
+  button {
+    background: #22c55e;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  a {
+    display: block;
+    margin-top: 10px;
+    text-align: center;
+    color: #38bdf8;
+    text-decoration: none;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="box">
+  <h2>Login</h2>
+
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+
+  <button onclick="login()">Login</button>
+
+  <a href="register.html">Create Account</a>
+</div>
+
+<!-- Firebase Login Script -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7krl12Xewrb3nEYzWGCEeQE0s5FgG10U",
+    authDomain: "gamelive-3db71.firebaseapp.com",
+    projectId: "gamelive-3db71",
+    storageBucket: "gamelive-3db71.firebasestorage.app",
+    messagingSenderId: "581788962069",
+    appId: "1:581788962069:web:619583602ee846e17a6d1c"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  // 🔐 LOGIN WITH EMAIL + PASSWORD
+  window.login = async function () {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!email || !password) {
+      Swal.fire("Error", "Enter email and password", "warning");
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+
+      Swal.fire("Success", "Login successful 🎉", "success");
+
+      setTimeout(() => {
+        window.location.href = "dashboard.html";
+      }, 800);
+
+    } catch (err) {
+      Swal.fire("Login Failed", err.message, "error");
+    }
+  };
+</script>
+
+</body>
+</html>

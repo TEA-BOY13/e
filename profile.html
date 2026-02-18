@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #020617;
+    color: white;
+  }
+  header {
+    background: #0f172a;
+    padding: 15px;
+    text-align: center;
+  }
+  .profile {
+    padding: 20px;
+    text-align: center;
+  }
+  .avatar {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    margin: auto;
+    margin-bottom: 10px;
+    color: black;
+    font-weight: bold;
+  }
+  .card {
+    background: #0f172a;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 15px;
+    text-align: left;
+  }
+  label {
+    font-size: 14px;
+    color: #cbd5f5;
+  }
+  input {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    border-radius: 6px;
+    border: none;
+    margin-bottom: 10px;
+  }
+  .status {
+    font-weight: bold;
+  }
+  .live {
+    color: #22c55e;
+  }
+  .offline {
+    color: #ef4444;
+  }
+  button {
+    margin-top: 15px;
+    padding: 10px;
+    width: 100%;
+    background: #38bdf8;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>My Profile</h2>
+</header>
+
+<div class="profile">
+  <div class="avatar" id="avatar">?</div>
+
+  <div class="card">
+    <label>Full Name</label>
+    <input id="fullname">
+
+    <label>Username</label>
+    <input id="username">
+
+    <label>Email</label>
+    <input id="email" disabled>
+
+    <label>Favorite Game</label>
+    <input id="favGame">
+
+    <p>Status:
+      <span id="status" class="status offline">Offline</span>
+    </p>
+
+    <p>Total Streams: <strong id="streams">0</strong></p>
+
+    <button onclick="saveProfile()">Save Profile</button>
+  </div>
+
+  <button onclick="goHome()">⬅ Back to Home</button>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+<script>
+  // 🔥 Firebase config
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  const avatar = document.getElementById("avatar");
+  const fullname = document.getElementById("fullname");
+  const username = document.getElementById("username");
+  const email = document.getElementById("email");
+  const favGame = document.getElementById("favGame");
+  const statusEl = document.getElementById("status");
+  const streamsEl = document.getElementById("streams");
+
+  auth.onAuthStateChanged(async user => {
+    if (!user) {
+      window.location.href = "index.html";
+      return;
+    }
+
+    email.value = user.email;
+
+    const docRef = db.collection("users").doc(user.uid);
+    const snap = await docRef.get();
+
+    if (snap.exists) {
+      const data = snap.data();
+      fullname.value = data.fullname || "";
+      username.value = data.username || "";
+      favGame.value = data.favGame || "";
+      avatar.innerText = (data.username || "?")[0]?.toUpperCase();
+    }
+
+    // Live status
+    const liveSnap = await db.collection("streams")
+      .where("userId", "==", user.uid)
+      .where("live", "==", true)
+      .get();
+
+    if (!liveSnap.empty) {
+      statusEl.innerText = "Live";
+      statusEl.className = "status live";
+    } else {
+      statusEl.innerText = "Offline";
+      statusEl.className = "status offline";
+    }
+
+    // Total streams
+    const allStreams = await db.collection("streams")
+      .where("userId", "==", user.uid)
+      .get();
+
+    streamsEl.innerText = allStreams.size;
+  });
+
+  async function saveProfile() {
+    const user = auth.currentUser;
+
+    if (!fullname.value || !username.value) {
+      Swal.fire("Error", "Full name and username required", "warning");
+      return;
+    }
+
+    await db.collection("users").doc(user.uid).set({
+      fullname: fullname.value,
+      username: username.value,
+      favGame: favGame.value,
+      email: user.email
+    }, { merge: true });
+
+    avatar.innerText = username.value[0].toUpperCase();
+
+    Swal.fire("Saved", "Profile updated successfully", "success");
+  }
+
+  function goHome() {
+    window.location.href = "dashboard.html";
+  }
+</script>
+
+</body>
+</html>

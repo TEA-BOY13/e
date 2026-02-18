@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+body { background:#020617; color:white; font-family:Arial }
+header { background:#0f172a; padding:15px; text-align:center }
+.card { background:#0f172a; padding:15px; margin:15px; border-radius:10px }
+.user, .stream { border-bottom:1px solid #1e293b; padding:10px }
+button { padding:5px 10px; border:none; border-radius:5px; cursor:pointer; margin-right:5px }
+.ban { background:#ef4444; color:white }
+.end { background:#f97316; color:black }
+.share { background:#38bdf8; color:black }
+.feature { background:#facc15; color:black }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>🛡 Admin Dashboard</h2>
+</header>
+
+<div class="card">
+  <h3>Users</h3>
+  <div id="users"></div>
+</div>
+
+<div class="card">
+  <h3>Live Streams</h3>
+  <div id="streams"></div>
+</div>
+
+<!-- Firebase v10 -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  collection,
+  onSnapshot,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// 🔥 Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyC7krl12Xewrb3nEYzWGCEeQE0s5FgG10U",
+  authDomain: "gamelive-3db71.firebaseapp.com",
+  projectId: "gamelive-3db71",
+  storageBucket: "gamelive-3db71.firebasestorage.app",
+  messagingSenderId: "581788962069",
+  appId: "1:581788962069:web:619583602ee846e17a6d1c"
+};
+
+// Init
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const usersBox = document.getElementById("users");
+const streamsBox = document.getElementById("streams");
+
+// 🔐 ADMIN PROTECTION (FIXED)
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    location.href = "login.html";
+    return;
+  }
+
+  const snap = await getDoc(doc(db, "users", user.uid));
+
+  if (!snap.exists() || snap.data().role !== "admin") {
+    Swal.fire("Access Denied", "Admins only", "error");
+    await signOut(auth);
+    location.href = "login.html";
+    return;
+  }
+
+  loadUsers();
+  loadStreams();
+});
+
+// 👥 USERS
+function loadUsers() {
+  onSnapshot(collection(db, "users"), snap => {
+    usersBox.innerHTML = "";
+
+    snap.forEach(docSnap => {
+      const u = docSnap.data();
+
+      usersBox.innerHTML += `
+        <div class="user">
+          <strong>${u.username}</strong> (${u.email})
+          <button class="ban"
+            onclick="toggleBan('${docSnap.id}', ${!u.banned})">
+            ${u.banned ? "Unban" : "Ban"}
+          </button>
+        </div>
+      `;
+    });
+  });
+}
+
+// 🔴 STREAMS
+function loadStreams() {
+  onSnapshot(collection(db, "streams"), snap => {
+    streamsBox.innerHTML = "";
+
+    const live = snap.docs.filter(d => d.data().live);
+
+    if (live.length === 0) {
+      streamsBox.innerHTML = "<p>No live streams</p>";
+      return;
+    }
+
+    live.forEach(docSnap => {
+      const s = docSnap.data();
+      const streamUrl = `${location.origin}/player.html?stream=${docSnap.id}`;
+
+      streamsBox.innerHTML += `
+        <div class="stream">
+          🎮 <strong>${s.game}</strong> — ${s.username}<br><br>
+
+          <button class="feature"
+            onclick="featureStream('${docSnap.id}', ${!s.featured})">
+            ${s.featured ? "⭐ Unfeature" : "⭐ Feature"}
+          </button>
+
+          <button class="share"
+            onclick="shareStream('${streamUrl}')">
+            🔗 Share
+          </button>
+
+          <button class="end"
+            onclick="endStream('${docSnap.id}')">
+            End
+          </button>
+        </div>
+      `;
+    });
+  });
+}
+
+/* ===== GLOBAL FUNCTIONS (REQUIRED FOR MODULE) ===== */
+
+window.toggleBan = async (uid, value) => {
+  await updateDoc(doc(db, "users", uid), { banned: value });
+};
+
+window.featureStream = async (id, value) => {
+  await updateDoc(doc(db, "streams", id), { featured: value });
+
+  Swal.fire(
+    value ? "Featured!" : "Removed",
+    value ? "Stream is now featured" : "Stream removed from featured",
+    "success"
+  );
+};
+
+window.shareStream = (url) => {
+  navigator.clipboard.writeText(url);
+  Swal.fire("Copied!", "Stream link copied", "success");
+};
+
+window.endStream = async (id) => {
+  await updateDoc(doc(db, "streams", id), { live: false });
+};
+</script>
+
+</body>
+</html>
